@@ -14,7 +14,7 @@ var states = new Dictionary<string, int>()
 
 Console.WriteLine($"Part 1: {File.ReadAllLines("input.txt").Sum(x => states[x])}");
 
-//Part 2, convert state to equivalent part 1 state
+//Part 2, convert new interpretation of state to equivalent part 1 state
 Console.WriteLine($"Part 2: {File.ReadAllLines("input.txt").Select(x =>
 {
     return x switch
