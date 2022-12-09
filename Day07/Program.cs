@@ -1,13 +1,11 @@
-﻿using System.Runtime.CompilerServices;
+﻿var input = File.ReadAllLines("input.txt").ToList();
 
-var input = File.ReadAllLines("input.txt").ToList();
+Node root = new('d', "/", null);
 
-Node root = new Node('d', "/", null);
-
-Stack<Node> stack = new Stack<Node>();
+Stack<Node> stack = new();
 stack.Push(root);
 
-Dictionary<string, Node> dirs = new Dictionary<string, Node>
+Dictionary<string, Node> dirs = new()
 {
     { "/", root }
 };
