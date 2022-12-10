@@ -1,7 +1,4 @@
-﻿using System.Globalization;
-using System.Net;
-
-var input = File.ReadAllLines("input.txt").ToArray();
+﻿var input = File.ReadAllLines("input.txt").ToArray();
 
 var rope1 = new (int x, int y)[]
 {
