@@ -1,6 +1,6 @@
 ﻿var input = File.ReadAllLines("input.txt").ToArray();
 
-List<Monkey> monkeys = new List<Monkey>();
+List<Monkey> monkeys = new();
 
 for(var i = 0; i < input.Length; i+=6)
 {
