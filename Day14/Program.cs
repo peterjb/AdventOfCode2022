@@ -1,7 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System.Xml.Serialization;
-
-var rock = File.ReadAllLines("test.txt");
+﻿var rock = File.ReadAllLines("input.txt");
 
 List<(int x, int y)> points = new();
 List<((int x, int y) start, (int x, int y) end)> lines = new();
@@ -113,10 +110,10 @@ void part2()
             sandBlocks.Add(sand);
             sandUnits++;
         }
-        printgrid2();
-        Console.ReadKey();
+        //printgrid2();
+        //Console.ReadKey();
     }
-    Console.WriteLine(sandUnits);
+    Console.WriteLine($"Part 2: {sandUnits}");
 
 }
 
@@ -208,7 +205,7 @@ void part1()
         }
     }
 
-    Console.WriteLine(sandUnits);
+    Console.WriteLine($"Part 1: {sandUnits}");
 
 }
 void printgrid()
