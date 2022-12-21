@@ -1,11 +1,8 @@
-﻿using System.ComponentModel;
-using System.Diagnostics;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
-var lines = File.ReadAllLines("test.txt");
+var lines = File.ReadAllLines("input.txt");
 
 var blueprints = new List<Blueprint>();
-
 
 foreach (var l in lines)
 {
@@ -13,7 +10,6 @@ foreach (var l in lines)
     blueprints.Add(new Blueprint(ms.Select(m => int.Parse(m.Value)).ToList()));
 }
 
-var x = 100;
 var blueprintid = 0;
 
 Dictionary<State, State> stateCache = new();
@@ -23,38 +19,52 @@ char[] robotTypes = new char[]
 };
 
 var results = new List<int>();
+var results2 = new List<int>();
+
+int memoCount = 0;
+int maxGeodes = int.MinValue;
+
+
+int time = 24;
 
 for (var bs = 0; bs < blueprints.Count(); bs++)
 {
+    maxGeodes = int.MinValue;
     blueprintid = bs;
     var g = doWork();
     var bg = (bs + 1) * g;
-    results.Add(bg);
-    Console.WriteLine($"Blueprint {bs + 1} => {g} => {bg}");
+    results2.Add(bg);
 }
 
-Console.WriteLine(results.Sum());
+Console.WriteLine($"Part 1: {results2.Sum()}");
+
+time = 32;
+
+for (var bs = 0; bs < 3; bs++)
+{
+    maxGeodes = int.MinValue;
+    blueprintid = bs;
+    var g = doWork();
+    results.Add(g);
+}
+
+Console.WriteLine($"Part 2: {results.Aggregate(1, (agg, x) => x * agg)}");
 
 int doWork()
 {
-    stateCache = new();
+    stateCache.Clear();
     var state = new State() { minute = 0, oreMachines = 1 };
     var r = workHelper(state);
-    //Console.WriteLine("hi");
     return r.geodes;
 }
-
 
 State workHelper(State state)
 {
     if (stateCache.ContainsKey(state))
     {
+        memoCount++;
         return stateCache[state];
     }
-
-
-    if (state.clay < 0)
-        throw new Exception();
 
     var nextState = state with
     {
@@ -65,87 +75,71 @@ State workHelper(State state)
         geodes = state.geodes + state.geodeMachines
     };
 
-    if (nextState.minute == 24)
+    if (nextState.minute == time)
     {
+        maxGeodes = Math.Max(maxGeodes, nextState.geodes);
         return nextState;
     }
-    var x = 24 - state.minute;
+
+    var x = time - state.minute;
     var b = blueprints[blueprintid];
 
-    int minTimeForClayMachine = (int)Math.Ceiling(Math.Max(b.clayOre - state.ore, 0) / (double)state.oreMachines) + 1;
-    int minTimeForObsidianMachine = int.MaxValue;
-    if(state.clayMachines == 0)
+    //to limit the search space, these are loose upper bound calculations that calculate how much of a substance we will have in the time remaining
+    //if we could create a machine of that type every tick the rest of the way, which is the max possible
+    //these upper bounds are very loose, but good enough to finish in a reasonable time/space
+    // MaxSubstance(t) = initialSubstanceCount + initialSubstanceMachineCount * t + Sum(1..(t-1)) 
+    // takes about a minute and 2gb ram. I'm sure much tighter bounds could be found
+    var tmaxGeodes = state.geodes + (state.geodeMachines * x) + sumN(x - 1);
+    var tmaxObsidian = state.obsidian + (state.obsidianMachines * x) + sumN(x - 1);
+    var tmaxClay = state.clay + (state.clayMachines * x) + sumN(x - 1);
+    var tmaxOre = state.ore + (state.oreMachines * x) + sumN(x - 1);
+
+    //upper bound on geodes with the remaining time
+    if (tmaxGeodes < maxGeodes)
     {
-       minTimeForObsidianMachine = Math.Max(
-           minTimeForClayMachine + b.obsidianClay,
-           (int)Math.Ceiling(Math.Max(b.obsidianOre - state.ore, 0) / (double)state.oreMachines)) + 1;
-    }
-    else
-    {
-        minTimeForObsidianMachine = Math.Max(
-           (int)Math.Ceiling(Math.Max(b.obsidianClay - state.clay, 0) / (double)state.clayMachines),
-           (int)Math.Ceiling(Math.Max(b.obsidianOre - state.ore, 0) / (double)state.oreMachines)) + 1;
-    }
-    int minTimeForGeodeMachine = int.MaxValue;
-    if(state.obsidianMachines == 0)
-    {
-        minTimeForGeodeMachine = Math.Max(
-            minTimeForObsidianMachine + b.geodeObsidian,
-            (int)Math.Ceiling(Math.Max(b.geodeOre - state.ore, 0) / (double)state.oreMachines)) + 1;
-    }
-    else
-    {
-        minTimeForGeodeMachine = Math.Max(
-            (int)Math.Ceiling(Math.Max(b.geodeObsidian - state.obsidian, 0) / (double)state.obsidianMachines),
-            (int)Math.Ceiling(Math.Max(b.geodeOre - state.ore, 0) / (double)state.oreMachines)) + 1;
+        return state;
     }
 
-
-    if (x < minTimeForGeodeMachine)
-        //(state.geodeMachines == 0 && 
-        //(state.obsidianMachines == 0 && x < b.geodeObsidian ||
-        //state.obsidianMachines != 0 && x < Math.Max(Math.Max(0, b.geodeObsidian - state.obsidian)/ (float)state.obsidianMachines, Math.Max(0, (b.geodeOre - state.ore))/(float)state.oreMachines)) 
-        //|| (state.obsidianMachines == 0 && state.clayMachines != 0 && x <= b.geodeObsidian + Math.Max(Math.Max(0, b.obsidianClay - state.clay)/(float)state.clayMachines, Math.Max(0, b.obsidianOre - state.ore)/(float)state.oreMachines))
-        ////||
-        ////(x - b.geodeObsidian - b.obsidianClay < Math.Max(0, (b.clayOre - state.ore)) && state.clayMachines == 0)
-        //)
+    //upper bound on obsidian to see if we can create a geode machine in the remaining time
+    if (state.geodeMachines == 0 && tmaxObsidian < b.geodeObsidian)
     {
-        return nextState;
+        return state;
     }
 
-    //if (x < (b.geodeObsidian - state.obsidian) + (b.geodeOre - state.ore)
-    //    && state.geodeMachines == 0)
-    //{
-    //    return nextState;
-    //}
+    //upper bound on clay to see if we can create an obsidian machine in the remaining time
+    if (tmaxClay < b.obsidianClay && state.obsidianMachines == 0)
+    {
+        return state;
+    }
 
-    var result = workHelper(nextState);
+    State temp = default;
+    State result = default;
     foreach (var c in robotTypes)
     {
-
         if (canCreateRobot(blueprintid, c, state))
         {
-            if (c == 's')
+            temp = workHelper(createRobot(blueprintid, c, nextState));
+            if (temp.geodes > result.geodes)
             {
-                var alkj = 100;
-            }
-            var t = workHelper(createRobot(blueprintid, c, nextState));
-            if (t.geodes > result.geodes)
-            {
-                result = t;
+                result = temp;
             }
         }
     }
-    if (!stateCache.ContainsKey(state))
-        stateCache.Add(state, result);
-    else
+    temp = workHelper(nextState);
+    if(temp.geodes > result.geodes)
     {
-        var y = 1200;
+        result = temp;
     }
+
+    stateCache.Add(state, result);
 
     return result;
 }
 
+int sumN(int n)
+{
+    return n * (n + 1) / 2;
+}
 
 bool canCreateRobot(int blueprintId, char robotType, State state)
 {
