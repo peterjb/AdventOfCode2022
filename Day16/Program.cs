@@ -1,7 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Xml.Linq;
-
-var lines = File.ReadAllLines("input.txt");
+﻿var lines = File.ReadAllLines("input.txt");
 
 Dictionary<string, Node> nodes = new();
 HashSet<Node> openableNodes = new();
@@ -16,7 +13,7 @@ foreach (var line in lines)
         open = false
     };
     nodes.Add(n, node);
-    if(node.rate > 0)
+    if (node.rate > 0)
     {
         openableNodes.Add(node);
     }
@@ -29,34 +26,47 @@ foreach (var line in lines)
 
 Dictionary<(Node a, Node b), int> distanceCache = new();
 
+var p1 = maxP(30);
+Console.WriteLine($"Part 1: {p1.pressure}");
 
-var yasdfa = findMaxPressure(nodes["AA"], openableNodes, 0);
+var p21 = maxP(26);
+openableNodes.ExceptWith(p21.visited);
+var p22 = maxP(26);
+Console.WriteLine($"Part 2: {p21.pressure} + {p22.pressure} = {p21.pressure + p22.pressure}");
 
-Console.WriteLine(yasdfa);
-
-long findMaxPressure(Node cur, HashSet<Node> openable, int minutes)
+(long pressure, List<Node> visited) maxP(int minutes)
 {
-    long maxPressure = 0;
-    var os = openable.Where(n => cur != n).Select(n => (n, distance(cur, n))).ToList();
-    
-    var release = (30 - minutes) * cur.rate;
+
+    return findMaxPressure(nodes["AA"], openableNodes, 0, minutes);
+}
+
+(long pressure, List<Node> visited) findMaxPressure(Node cur, HashSet<Node> openable, int minutes, int maxTime)
+{
+    (long pressure, List<Node> visited) maxPressure = (0L, new());
+    var os = openable.Where(n => n != cur)
+        .Select(n => (node: n, distance: distance(cur, n)))
+        .Where(n => n.distance + 2 + minutes <= maxTime)
+        .ToList();
+
+    var release = (maxTime - minutes) * cur.rate;
 
     if (os.Count == 0)
     {
-        return release;
+        return (release, new() { cur });
     }
 
     foreach (var (node, d) in os)
     {
-        if (d + 2 + minutes <= 30)
+        openable.Remove(node);
+        var r = findMaxPressure(node, openable, minutes + d + 1, maxTime);
+        if(r.pressure > maxPressure.pressure)
         {
-            openable.Remove(node);
-            maxPressure = Math.Max(maxPressure, findMaxPressure(node, openable, minutes + d + 1));
-            openable.Add(node);
+            maxPressure = r; 
         }
+        openable.Add(node);
     }
 
-    return release + maxPressure;
+    return (release + maxPressure.pressure, maxPressure.visited.Append(cur).ToList());
 }
 
 int distance(Node start, Node end)
@@ -65,7 +75,7 @@ int distance(Node start, Node end)
     if (distanceCache.TryGetValue((start, end), out minDist))
     {
         return minDist;
-    }    
+    }
     else
     {
         Dictionary<Node, int> dv = new() { { start, 0 } };
@@ -76,11 +86,11 @@ int distance(Node start, Node end)
     }
 }
 
-int distanceHelper(Node start, Node end, int d, Dictionary<Node,int> dv)
+int distanceHelper(Node start, Node end, int d, Dictionary<Node, int> dv)
 {
     int minD = int.MaxValue;
 
-    if(start.neighbors.Contains(end))
+    if (start.neighbors.Contains(end))
     {
         return d + 1;
     }
@@ -89,7 +99,7 @@ int distanceHelper(Node start, Node end, int d, Dictionary<Node,int> dv)
     {
         if (dv.ContainsKey(n))
         {
-            if(dv[n] < d + 1)   
+            if (dv[n] < d + 1)
                 continue;
             else
                 dv[n] = d + 1;
@@ -105,7 +115,8 @@ int distanceHelper(Node start, Node end, int d, Dictionary<Node,int> dv)
     return minD;
 }
 
-class Node {
+class Node
+{
     public string name;
     public bool open;
     public int rate;
