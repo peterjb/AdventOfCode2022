@@ -1,258 +1,196 @@
 ﻿var windDirections = File.ReadAllText("input.txt");
-
-var shapes = new List<char[,]> {
-new[,]
-{
-    { '#','#','#','#'}
-},
-new[,]
-{
-    { '.','#','.'},
-    { '#','#','#'},
-    { '.','#','.'}
-},
-    new[,]
-{
-    { '.','.','#'},
-    { '.','.','#'},
-    { '#','#','#'}
-},
-    new[,]
-{
-    { '#' },
-    { '#' },
-    { '#' },
-    { '#' }
-}, new[,]
-{
-    { '#','#' },
-    { '#','#' }
-}
-};
-
-long floor = 0;
-
-int pieceIndex = -1;
+int boardWidth = 7;
 char[] pieceTypes = {
- '-','+','l','|','s'
+ '-','+','L','|','s'
 };
 
-HashSet<(char, char, int, long)> imemo = new();
-int memohitcount = 0;
+HashSet<(int x, long y)> board;
+long pieceIndex = 0;
+long height = 0;
+long pieceCount = 0;
 
-SortedDictionary<long, List<piece>> spatialPartition = new();
+Console.WriteLine($"Part 1: {Simulate(2022)}");
+Console.WriteLine($"Part 2: {Simulate(1000000000000)}");
 
-var t = 0;
-
-    for (var rocks = 0L; rocks < 1000000000000; rocks++) //1000000000000
+long Simulate(long numToDrop)
 {
-    if(rocks % 100 == 0)
+    //create board
+    board = new();
+    pieceIndex = 0;
+    height = 0;
+    pieceCount = 0;
+    Dictionary<long, (long pieceIndex, long pieceCount, long height, HashSet<(int x, long y)> board)> boards = new();
+
+    long absoluteTime = 0;
+    long relativeTime = 0;
+
+    for (var i = 0L; i < numToDrop; i++) //1000000000000
     {
-        var ks = spatialPartition.Keys.Take(spatialPartition.Count()/2).ToList();
-        foreach(var k in ks)
+        boards.Add(absoluteTime, (pieceIndex, pieceCount, height, new(board)));
+
+        //i'm sure there's a better way to memoize this, but idea is to check the board status at each relative time that
+        //matches this absolute time in the memo. If we are dropping the same piece and the board looks the same
+        //we've found our repeat, so just calculate the total height.
+        var xyz = absoluteTime / windDirections.Length;
+        if (xyz > 0)
         {
-            spatialPartition.Remove(k);
-        }
-    }
-
-    var p = nextPiece();
-
-    while (true)
-    {
-        //draw();
-        //Console.ReadKey();
-
-        var wind = windDirections[t];
-
-        switch (wind)
-        {
-            case '<':
-                tryMoveLeftRight(p, -1);
-                break;
-            case '>':
-                tryMoveLeftRight(p, 1);
-                break;
-            default:
-                break;
-        }
-        //draw();
-        //Console.ReadKey();
-        t++;
-        if (t == windDirections.Length)
-        {
-            t = 0;
-        }
-
-        if (!canMoveDown(p))
-        {
-            for(var h = p.bottom; h <= p.top; h++)
+            for (var a = xyz - 1; a >= 0; a--)
             {
-                if (!spatialPartition.ContainsKey(h))
+                var ind = relativeTime + a * windDirections.Length;
+                if (boards.ContainsKey(ind) && boards[ind].pieceIndex == pieceIndex)
                 {
-                    spatialPartition.Add(h, new List<piece>());
+                    //check if the top of each board state is the same (normalize heights), this is probably wrong in general, maybe can memo
+                    //the board diffs and normalize heights?
+                    var b1 = boards[ind].board.Where(p => p.y >= boards[ind].height - 10).Select(p => (p.x, p.y - boards[ind].height));
+                    var b2 = boards[absoluteTime].board.Where(p => p.y >= boards[absoluteTime].height - 10).Select(p => (p.x, p.y - boards[absoluteTime].height));
+
+                    if (b1.SequenceEqual(b2))
+                    {
+                        //if we are here, we've found our repeat
+                        var initialPieceCount = boards[ind].pieceCount;
+                        var initialHeight = boards[ind].height;
+                        var piecesPerLoop = boards[absoluteTime].pieceCount - initialPieceCount;
+                        var heightPerLoop = boards[absoluteTime].height - initialHeight;
+                        var numberOfLoops = (numToDrop - initialPieceCount) / piecesPerLoop;
+                        var leftover = (numToDrop - initialPieceCount) % piecesPerLoop;
+
+                        //last piece is the height of the leftovers
+                        //   height of the board where the piece count = leftover piece count + initial piece count
+                        // - height of intial
+                        var h = initialHeight 
+                            + (numberOfLoops * heightPerLoop)
+                            + boards.Where(x => x.Value.pieceCount == boards[ind].pieceCount + leftover).First().Value.height - boards[ind].height;
+
+                        return h;
+                    }
                 }
-                spatialPartition[h].Add(p);
             }
-            floor = Math.Max(floor, p.top);
+        }
+
+        var piece = createPiece();
+
+        //move new piece until it hits ground
+        while (true)
+        {
+            HashSet<(int x, long y)> p2;
+            var wind = windDirections[(int)relativeTime];
+            if (wind == '<')
+            {
+                p2 = MoveX(piece, -1);
+            }
+            else
+            {
+                p2 = MoveX(piece, 1);
+            }
+
+            if (!p2.Intersect(board).Any())
+            {
+                piece = p2;
+            }
+
+            absoluteTime++;
+            relativeTime = absoluteTime % windDirections.Length;
+
+            p2 = MoveY(piece);
+            if (p2.Intersect(board).Any() || p2.Any(p => p.y == 0))
+            {
+                board.UnionWith(piece);
+                height = Math.Max(height, piece.MaxBy(n => n.y).y);
+                break;
+            }
+            else
+            {
+                piece = p2;
+            }
+        }
+    }
+    return height;
+}
+
+HashSet<(int x, long y)> createPiece()
+{
+    char stype = pieceTypes[pieceIndex];
+
+    pieceIndex = (pieceIndex + 1) % pieceTypes.Length;
+    pieceCount++;
+
+    HashSet<(int x, long y)> shape = new();
+    int x = 3;
+    long y = height + 4;
+
+    switch (stype)
+    {
+        case '-':
+            {
+                shape.Add((x, y));
+                shape.Add((x + 1, y));
+                shape.Add((x + 2, y));
+                shape.Add((x + 3, y));
+                break;
+            }
+        case '+':
+            {
+                shape.Add((x + 1, y));
+                shape.Add((x, y + 1));
+                shape.Add((x + 1, y + 1));
+                shape.Add((x + 2, y + 1));
+                shape.Add((x + 1, y + 2));
+                break;
+            }
+        case 'L':
+            {
+                shape.Add((x, y));
+                shape.Add((x + 1, y));
+                shape.Add((x + 2, y));
+                shape.Add((x + 2, y + 1));
+                shape.Add((x + 2, y + 2));
+                break;
+            }
+        case '|':
+            {
+                shape.Add((x, y));
+                shape.Add((x, y + 1));
+                shape.Add((x, y + 2));
+                shape.Add((x, y + 3));
+                break;
+            }
+        case 's':
+            {
+                shape.Add((x, y));
+                shape.Add((x + 1, y));
+                shape.Add((x, y + 1));
+                shape.Add((x + 1, y + 1));
+                break;
+            }
+        default:
             break;
-        }
     }
-}
-var x = 100;
 
-bool tryMoveLeftRight(piece p, int x)
+    return shape;
+}
+
+HashSet<(int x, long y)> MoveX(HashSet<(int x, long y)> piece, int dir)
 {
-    if (x == 1 && (p.right == 7))
+    HashSet<(int x, long y)> newPiece = new();
+    foreach (var (x, y) in piece)
     {
-        return false;
-    }
-    else if (x == -1 && (p.left == 1))
-    {
-        return false;
-    }
-    else
-    {
-        p.left += x;
-        for (var h = p.bottom; h <= floor; h++)
+        var newX = x + dir;
+        if (newX > boardWidth || newX < 1)
         {
-            if (spatialPartition[h].Any(op => intersect(op, p)))
-            {
-                p.left -= x;
-                return false;
-            }
+            return piece;
         }
+        newPiece.Add((newX, y));
     }
-    return true;
+    return newPiece;
 }
 
-bool canMoveDown(piece p)
+HashSet<(int x, long y)> MoveY(HashSet<(int x, long y)> piece)
 {
-    if (p.bottom == 1)
-        return false;
-
-    p.bottom -= 1;
-
-    for (var h = p.bottom; h <= floor; h++)
+    HashSet<(int x, long y)> newPiece = new();
+    foreach (var (x, y) in piece)
     {
-        if (spatialPartition[h].Any(op => intersect(op, p)))
-        {
-            p.bottom += 1;
-            return false;
-        }
+        var newY = y - 1;
+        newPiece.Add((x, newY));
     }
-
-    return true;
-}
-
-bool intersect(piece one, piece two)
-{
-    if (imemo.Contains((one.type, two.type, one.left - two.left, one.bottom - two.bottom)))
-    {
-        return true;
-    }
-
-    if(one.right < two.left || one.left > two.right || one.bottom > two.top || one.top < two.bottom) return false;
-
-    var startC = Math.Max(one.left, two.left);
-    var endC = Math.Min(one.right, two.right);
-
-    var startR = Math.Max(one.bottom, two.bottom); 
-    var endR = Math.Min(one.top, two.top);
-
-    for (var r = startR; r <= endR; r++)
-    {
-        for (var c = startC; c <= endC; c++)
-        {
-            if (one.shape[one.top - r, c - one.left] == '#' && two.shape[two.top - r, c - two.left] == '#')
-            {
-                imemo.Add((one.type, two.type, one.left - two.left, one.bottom - two.bottom));
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-piece nextPiece()
-{
-    pieceIndex++;
-    if (pieceIndex == shapes.Count)
-        pieceIndex = 0;
-
-
-    return new piece()
-    {
-        shape = shapes[pieceIndex],
-        type = pieceTypes[pieceIndex],
-        bottom = floor + 4,
-        left = 3
-    };
-}
-
-
-//void draw()
-//{
-//    var h = 25;
-
-//    char[,] grid = new char[h, 9];
-
-//    for (var r = 0; r < h; r++)
-//    {
-//        for (var c = 0; c < 9; c++)
-//        {
-//            if (r == h-1 && (c == 0 || c == 8))
-//                grid[r, c] = '+';
-//            else if (r == h-1)
-//                grid[r, c] = '-';
-//            else if (c == 0 || c == 8)
-//                grid[r, c] = '|';
-//            else
-//                grid[r, c] = '.';
-//        }
-//    }
-
-
-//    foreach (var p in pieces)
-//    {
-//        for(var r = 0; r < p.dims.h; r++)
-//        {
-//            for(var c = 0; c < p.dims.w; c++)
-//            {
-//                if (p.shape[r,c] == '#')
-//                {
-//                    grid[h - p.bottom - p.dims.h + r, p.left + c] = '#';
-//                }
-//            }
-//        }
-//    }
-
-//    for (var r = 0; r < h; r++)
-//    {
-//        for (var c = 0; c < 9; c++)
-//        {
-//            Console.Write(grid[r, c]);
-//        }
-//        Console.WriteLine();
-//    }
-//}
-
-class piece
-{
-    public char[,] shape;
-    public char type;
-    public int left;
-    public long bottom;
-    public int right => left + dims.w - 1;
-    public long top => bottom + dims.h - 1;
-    public (int w,int h) dims { get { return extents[type]; } }
-
-    private static Dictionary<char, (int w, int h)> extents = new()
-    {
-        { '-', (4,1) },
-        { '+', (3,3) },
-        { 'l', (3,3) },
-        { '|', (1,4) },
-        { 's', (2,2) }
-    };
+    return newPiece;
 }
