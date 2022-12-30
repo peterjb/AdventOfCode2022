@@ -1,7 +1,11 @@
-﻿var lines = File.ReadAllLines("input.txt");
+﻿var stopwatch = new System.Diagnostics.Stopwatch();
+stopwatch.Start();
+var lines = File.ReadAllLines("input.txt");
 
 Dictionary<string, Node> nodes = new();
 HashSet<Node> openableNodes = new();
+Dictionary<(string, string, int, int), (long pressure, List<Node> visited)> pressureMemo = new();
+long memocount = 0;
 
 foreach (var line in lines)
 {
@@ -26,22 +30,44 @@ foreach (var line in lines)
 
 Dictionary<(Node a, Node b), int> distanceCache = new();
 
-var p1 = maxP(30);
+var p1 = maxP(30, openableNodes);
 Console.WriteLine($"Part 1: {p1.pressure}");
 
-var p21 = maxP(26);
-openableNodes.ExceptWith(p21.visited);
-var p22 = maxP(26);
-Console.WriteLine($"Part 2: {p21.pressure} + {p22.pressure} = {p21.pressure + p22.pressure}");
+var subsets = openableNodes.GetSubsets().OrderBy(x => x.Count).ToList();
+SortedSet<long> ls = new();
+for(var s = 0; s < subsets.Count; s++)
+{
+    var p21 = maxP(26, subsets[s]);
+    var st = new HashSet<Node>(openableNodes);
+    st.ExceptWith(p21.visited);
+    var p22 = maxP(26, st);
 
-(long pressure, List<Node> visited) maxP(int minutes)
+    ls.Add(p21.pressure + p22.pressure);
+}
+
+Console.WriteLine($"Part 1: {ls.Max()}");
+
+stopwatch.Stop();
+
+//Console.WriteLine(stopwatch.Elapsed.TotalSeconds);
+
+
+(long pressure, List<Node> visited) maxP(int minutes, HashSet<Node> openableNodes)
 {
 
     return findMaxPressure(nodes["AA"], openableNodes, 0, minutes);
 }
 
+
 (long pressure, List<Node> visited) findMaxPressure(Node cur, HashSet<Node> openable, int minutes, int maxTime)
 {
+    var key = (cur.name, string.Join(' ',openable.OrderBy(x => x.name).Select(x => x.name)), minutes, maxTime);
+    if (pressureMemo.ContainsKey(key))
+    {
+        memocount++;
+        return pressureMemo[key];
+    }
+
     (long pressure, List<Node> visited) maxPressure = (0L, new());
     var os = openable.Where(n => n != cur)
         .Select(n => (node: n, distance: distance(cur, n)))
@@ -52,21 +78,24 @@ Console.WriteLine($"Part 2: {p21.pressure} + {p22.pressure} = {p21.pressure + p2
 
     if (os.Count == 0)
     {
-        return (release, new() { cur });
+        (long, List<Node>) r2 = (release, new() { cur });
+        pressureMemo.Add(key, r2);
+        return r2;
     }
 
     foreach (var (node, d) in os)
     {
         openable.Remove(node);
         var r = findMaxPressure(node, openable, minutes + d + 1, maxTime);
-        if(r.pressure > maxPressure.pressure)
+        if (r.pressure > maxPressure.pressure)
         {
-            maxPressure = r; 
+            maxPressure = r;
         }
         openable.Add(node);
     }
-
-    return (release + maxPressure.pressure, maxPressure.visited.Append(cur).ToList());
+    (long, List<Node>) r3 = (release + maxPressure.pressure, maxPressure.visited.Append(cur).ToList());
+    pressureMemo.Add(key, r3);
+    return r3;
 }
 
 int distance(Node start, Node end)
@@ -115,10 +144,36 @@ int distanceHelper(Node start, Node end, int d, Dictionary<Node, int> dv)
     return minD;
 }
 
+void printSet<T>(HashSet<T> set)
+{
+    Console.Write("{");
+    Console.Write(string.Join(",", set));
+    Console.Write("}");
+    Console.WriteLine();
+}
+
 class Node
 {
     public string name;
     public bool open;
     public int rate;
     public HashSet<Node> neighbors = new();
+}
+
+static class Extensions
+{
+    public static IEnumerable<HashSet<T>> GetSubsets<T>(this HashSet<T> set)
+    {
+        for(var i = 0; i < Math.Pow(2, set.Count()); i++)
+        {
+            HashSet<T> tmp = new();
+            for (var j = 0; j < set.Count();j++)
+            {
+                if ((i >> j & 1) == 1)
+                    tmp.Add(set.ElementAt(j));
+            }
+            yield return tmp;
+        }
+    }
+
 }
